@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RAJA TERMINAL // LOGS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="matrix"></canvas>
+
+<div class="wrap">
+  <div class="hud">
+    <h1>RAJA LOGS</h1>
+    <div class="owner">OPERATOR: <b>RAJA</b></div>
+  </div>
+
+  <div class="panel">
+    <div class="actions" style="margin-top:0">
+      <button class="btn-cyan" id="exportBtn">⇩ EXPORT JSON</button>
+      <button class="btn-red"  id="clearBtn">✖ CLEAR</button>
+    </div>
+
+    <div class="term" id="term" style="margin-top:16px"></div>
+
+    <div class="warn">Local logs only. Server me kuch store nahi hota.</div>
+  </div>
+</div>
+
+<script type="module">
+import { matrixRain, Terminal } from './js/ui.js';
+import { DB } from './js/core.js';
+
+matrixRain();
+const term = new Terminal('term');
+const all = await DB.all('logs').catch(() => []);
+
+all.sort((a,b) => b.t - a.t).forEach(l => term.write(l.type, l.msg));
+
+document.getElementById('clearBtn').onclick = async () => {
+  await DB.clear('logs');
+  term.clear();
+};
+document.getElementById('exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(all, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'raja-logs-' + Date.now() + '.json';
+  a.click();
+};
+</script>
+</body>
+</html>
