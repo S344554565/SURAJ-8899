@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAJA TERMINAL // DASHBOARD</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="matrix"></canvas>
+
+<div class="wrap">
+  <div class="hud">
+    <h1 id="hudTitle">RAJA DASHBOARD</h1>
+    <div class="owner">OPERATOR: <b id="hudOwner">RAJA</b></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>Name</b><span id="stName">-</span></div>
+    <div class="stat"><b>Last Name</b><span id="stLast">-</span></div>
+    <div class="stat"><b>Delay</b><span id="stTime">-</span></div>
+    <div class="stat"><b>Status</b><span id="stStatus">-</span></div>
+    <div class="stat"><b>Total</b><span id="stTotal">0</span></div>
+    <div class="stat"><b>Sent</b><span id="stSent">0</span></div>
+    <div class="stat"><b>Failed</b><span id="stFail">0</span></div>
+    <div class="stat"><b>Elapsed</b><span id="stElapsed">0s</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="bar"><i id="progress"></i></div>
+    <div class="actions">
+      <button id="dStart" class="btn-green">▶ START</button>
+      <button id="dPause" class="btn-cyan">⏸ PAUSE</button>
+      <button id="dStop"  class="btn-red">■ STOP</button>
+    </div>
+
+    <div class="term" id="term" style="margin-top:18px"></div>
+
+    <div class="warn">
+      Live feed running. Har message real Meta Send API call hai.
+      Rate limit respected (delay per target).
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { bus, beep } from './js/core.js';
+import { Config } from './js/config.js';
+import { Sender } from './js/sender.js';
+import { matrixRain, Terminal, toast } from './js/ui.js';
+
+matrixRain();
+await Config.init();
+
+const term   = new Terminal('term');
+const engine = new Sender();
+
+let startAt = null, elapsedTimer = null;
+
+function refreshHeader(){
+  document.getElementById('hudTitle').textContent = Config.get('headerName') || 'RAJA DASHBOARD';
+  document.getElementById('hudOwner').textContent = Config.get('ownerName')  || 'RAJA';
+  document.getElementById('stName').textContent    = Config.get('name')       || '-';
+  document.getElementById('stLast').textContent    = Config.get('lastName')   || '-';
+  document.getElementById('stTime').textContent    = (Config.get('time')||5) + 's';
+}
+refreshHeader();
+
+function loadTargets(){
+  return JSON.parse(localStorage.getItem('raja_recipients') || '[]');
+}
+
+function setStatus(s){
+  document.getElementById('stStatus').textContent = s;
+}
+
+function startElapsed(){
+  startAt = Date.now();
+  elapsedTimer = setInterval(() => {
+    const sec = Math.floor((Date.now()-startAt)/1000);
+    document.getElementById('stElapsed').textContent = sec + 's';
+  }, 1000);
+}
+function stopElapsed(){ clearInterval(elapsedTimer); elapsedTimer = null; }
+
+async function boot(){
+  const list = loadTargets();
+  document.getElementById('stTotal').textContent = list.length;
+
+  if(!list.length){ toast('No targets loaded', 'err'); term.write('err','✖ No targets in storage'); return; }
+  if(!Config.get('apiToken')){ toast('API token missing','err'); return; }
+
+  engine.configure({
+    token:   Config.get('apiToken'),
+    text:    Config.get('msgText'),
+    delayMs: (Config.get('time')||5) * 1000,
+    retries: Config.get('retries')||3,
+    list
+  });
+
+  term.write('info', `▶ Booting engine :: ${list.length} targets`);
+  setStatus('RUNNING');
+  startElapsed();
+
+  try{
+    await engine.start();
+    term.write('ok', `■ Complete :: sent=${engine.sent} failed=${engine.failed}`);
+    toast(`Done. sent=${engine.sent} failed=${engine.failed}`);
+  }catch(e){
+    term.write('err', '✖ Engine error — '+e.message);
+  }finally{
+    setStatus('IDLE');
+    stopElapsed();
+    localStorage.setItem('raja_running','false');
+  }
+}
+
+/* ---------- engine events ---------- */
+bus.on('log', e => {
+  term.write(e.type, e.msg);
+  if(e.type === 'err' && Config.get('sound')) beep(220);
+});
+
+bus.on('progress', p => {
+  document.getElementById('stSent').textContent = p.sent;
+  document.getElementById('stFail').textContent = p.failed;
+  document.getElementById('progress').style.width =
+    ((p.index / p.total) * 100).toFixed(1) + '%';
+});
+
+/* ---------- controls ---------- */
+document.getElementById('dStart').onclick = boot;
+document.getElementById('dPause').onclick = () => engine.pause();
+document.getElementById('dPause').addEventListener('dblclick', () => engine.resume());
+document.getElementById('dStop').onclick  = () => { engine.stop(); toast('Stop sent'); };
+
+/* ---------- external start signal ---------- */
+if(localStorage.getItem('raja_running') === 'true'){
+  term.write('info','▶ External start signal detected');
+  boot();
+}
+
+/* ---------- config sync ---------- */
+bus.on('config:changed', () => refreshHeader());
+</script>
+</body>
+</html>
