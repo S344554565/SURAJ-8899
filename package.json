@@ -1,10 +1,15 @@
 {
-  "name": "rk-raja-host",
+  "name": "suraj-8899",
   "version": "1.0.0",
+  "description": "Dashboard App",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
